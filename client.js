@@ -1,75 +1,50 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
-const fs = require('fs');
 const { logger } = require('./utils/logger');
+const http = require('http');
 
+// Initialize WhatsApp client
 function initializeClient() {
-  logger.info('Initializing WhatsApp client...');
-
-  const sessionPath = '.wwebjs_auth';
   const client = new Client({
-    authStrategy: new LocalAuth({
-      dataPath: sessionPath,
-    }),
+    authStrategy: new LocalAuth(),
     puppeteer: {
       headless: true,
       args: ['--no-sandbox', '--disable-setuid-sandbox'],
     },
   });
 
+  // Log QR code for authentication
   client.on('qr', (qr) => {
-    logger.info('QR code generated');
+    logger.info('QR code received, scan it to authenticate:');
     qrcode.generate(qr, { small: true });
   });
 
+  // Log when client is ready
   client.on('ready', () => {
     logger.info('WhatsApp client is ready');
   });
 
-  client.on('authenticated', () => {
-    logger.info('WhatsApp client authenticated');
-  });
-
+  // Log authentication failure
   client.on('auth_failure', (msg) => {
     logger.error('Authentication failure:', msg);
-    logger.info('Clearing session data due to authentication failure...');
-    if (fs.existsSync(sessionPath)) {
-      fs.rmSync(sessionPath, { recursive: true, force: true });
-    }
-    setTimeout(() => client.initialize(), 5000); // Retry after 5 seconds
   });
 
-  client.on('disconnected', (reason) => {
-    logger.warn('Client disconnected:', reason);
-    setTimeout(() => client.initialize(), 5000); // Retry after 5 seconds
+  // Initialize the client
+  client.initialize().catch((err) => {
+    logger.error('Error initializing WhatsApp client:', err);
   });
 
-  // Handle initialization errors
-  const maxRetries = 3;
-  let retryCount = 0;
+  // Create an HTTP server to bind to 0.0.0.0 and the specified PORT
+  const PORT = process.env.PORT || 10000;
+  const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('Aliya Health Bot is running\n');
+  });
 
-  async function initializeWithRetry() {
-    try {
-      await client.initialize();
-    } catch (error) {
-      logger.error('Failed to initialize WhatsApp client:', error);
-      if (error.message.includes('ERR_NAME_NOT_RESOLVED')) {
-        logger.warn('DNS resolution failed for web.whatsapp.com. Retrying...');
-        if (retryCount < maxRetries) {
-          retryCount++;
-          logger.info(`Retry ${retryCount}/${maxRetries} in 5 seconds...`);
-          setTimeout(initializeWithRetry, 5000);
-        } else {
-          logger.error('Max retries reached. Could not connect to WhatsApp. Please check your network and try again.');
-          process.exit(1); // Exit the process if max retries are reached
-        }
-      } else {
-        throw error; // Rethrow other errors
-      }
-    }
-  }
+  server.listen(PORT, '0.0.0.0', () => {
+    logger.info(`Server listening on 0.0.0.0:${PORT}`);
+  });
 
-  initializeWithRetry();
   return client;
 }
 
