@@ -1,0 +1,17 @@
+2025/04/30-15:44:30.849 5b98 Reusing MANIFEST C:\Users\Administrator\Downloads\aliya-health-bot\.wwebjs_auth\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/MANIFEST-000001
+2025/04/30-15:44:30.849 5b98 Recovering log #156
+2025/04/30-15:44:30.956 5b98 Reusing old log C:\Users\Administrator\Downloads\aliya-health-bot\.wwebjs_auth\session\Default\IndexedDB\https_web.whatsapp.com_0.indexeddb.leveldb/000156.log 
+2025/04/30-15:44:35.588 4704 Manual compaction at level-0 from '\x00)\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00*\x00\x00\x00' @ 0 : 0; will stop at (end)
+2025/04/30-15:46:54.816 5160 Level-0 table #163: started
+2025/04/30-15:46:54.874 5160 Level-0 table #163: 1690351 bytes OK
+2025/04/30-15:46:54.876 5160 Delete type=0 #156
+2025/04/30-15:46:55.080 5160 Compacting 1@1 + 3@2 files
+2025/04/30-15:46:55.371 5160 Generated table #164@1: 57552 keys, 2244557 bytes
+2025/04/30-15:46:55.487 5160 Generated table #165@1: 15756 keys, 2158705 bytes
+2025/04/30-15:46:55.715 5160 Generated table #166@1: 48844 keys, 1096211 bytes
+2025/04/30-15:46:55.715 5160 Compacted 1@1 + 3@2 files => 5499473 bytes
+2025/04/30-15:46:55.716 5160 compacted to: files[ 0 0 3 0 0 0 0 ]
+2025/04/30-15:46:55.717 5160 Delete type=2 #158
+2025/04/30-15:46:55.717 5160 Delete type=2 #159
+2025/04/30-15:46:55.717 5160 Delete type=2 #160
+2025/04/30-15:46:55.717 5160 Delete type=2 #163
