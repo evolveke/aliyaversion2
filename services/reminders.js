@@ -1,11 +1,11 @@
 const { Client } = require('whatsapp-web.js');
 const { logger } = require('../utils/logger');
-const moment = require('moment-timezone'); // Install with `npm install moment-timezone`
+const moment = require('moment-timezone');
 
 // In-memory store for reminders
 const reminders = new Map();
 
-// Initialize WhatsApp client (assumes client is passed from index.js)
+// Initialize WhatsApp client
 let client = null;
 
 function setClient(whatsappClient) {
@@ -13,7 +13,7 @@ function setClient(whatsappClient) {
 }
 
 // Schedule a reminder
-function scheduleReminder(userId, message, timeStr, callback = null, durationDays = 1) {
+function scheduleReminder(userId, message, timeStrOrTimestamp, callback = null, durationDays = 1) {
   try {
     if (!client) {
       throw new Error('WhatsApp client not initialized');
@@ -25,15 +25,19 @@ function scheduleReminder(userId, message, timeStr, callback = null, durationDay
       return;
     }
 
-    // Parse time string (e.g., "08:00 AM") to a timestamp
-    const now = moment().tz('Africa/Nairobi'); // Use user's timezone (adjust based on location)
-    const [time, period] = timeStr.match(/(\d{2}:\d{2}) (AM|PM)/i).slice(1);
-    const [hours, minutes] = time.split(':').map(Number);
-    let reminderTime = moment(now).set({ hour: hours % 12 + (period.toUpperCase() === 'PM' ? 12 : 0), minute: minutes, second: 0, millisecond: 0 });
-
-    // If the time is in the past today, schedule for tomorrow
-    if (reminderTime.isBefore(now)) {
-      reminderTime.add(1, 'day');
+    // Convert timeStrOrTimestamp to a moment object
+    let reminderTime;
+    if (typeof timeStrOrTimestamp === 'number') {
+      reminderTime = moment(timeStrOrTimestamp).tz('Africa/Nairobi');
+    } else if (typeof timeStrOrTimestamp === 'string') {
+      const [time, period] = timeStrOrTimestamp.match(/(\d{2}:\d{2}) (AM|PM)/i)?.slice(1) || ['08:00', 'AM'];
+      const [hours, minutes] = time.split(':').map(Number);
+      reminderTime = moment().tz('Africa/Nairobi').set({ hour: hours % 12 + (period.toUpperCase() === 'PM' ? 12 : 0), minute: minutes, second: 0, millisecond: 0 });
+      if (reminderTime.isBefore(moment().tz('Africa/Nairobi'))) {
+        reminderTime.add(1, 'day');
+      }
+    } else {
+      throw new Error('Invalid timeStrOrTimestamp: must be a string or timestamp');
     }
 
     const timeMs = reminderTime.valueOf();
@@ -63,14 +67,17 @@ function scheduleReminder(userId, message, timeStr, callback = null, durationDay
         logger.info(`Reminder sent to ${userId}: ${reminder.message}`);
 
         if (callback) {
-          await callback();
+          const newMessage = await callback();
+          if (newMessage && typeof newMessage === 'string') {
+            reminder.message = newMessage.trim();
+          }
         }
 
         const reminder = reminders.get(reminderId);
         if (reminder && reminder.daysLeft > 1) {
           reminder.daysLeft = reminder.durationDays === Infinity ? Infinity : reminder.daysLeft - 1;
-          const nextTime = reminder.time + 24 * 60 * 60 * 1000; // Next day
-          scheduleReminder(userId, reminder.message, moment(nextTime).format('HH:mm A'), callback, reminder.daysLeft);
+          const nextTime = reminder.time + 24 * 60 * 60 * 1000;
+          scheduleReminder(userId, reminder.message, nextTime, callback, reminder.daysLeft);
         } else {
           reminders.delete(reminderId);
           logger.info(`Reminder ${reminderId} completed or removed`);

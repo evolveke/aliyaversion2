@@ -794,11 +794,11 @@ client.on('message', async (message) => {
           'INSERT INTO fitness_plans (user_id, goal, type, duration_days, daily_time, reminder_time, plan) VALUES ($1, $2, $3, $4, $5, $6, $7)',
           [userId, state.data.fitness_goal, state.data.fitness_type, state.data.fitness_duration, state.data.fitness_daily_time, state.data.fitness_reminder_time, plan]
         );
-        const initialMessage = getMessage('fitness_reminder', { plan: plan });
+        const initialMessage = getMessage('fitness_reminder', { plan: plan }) || 'Time for your fitness plan update';
         message.reply(getMessage('fitness_plan_result', { plan, duration: state.data.fitness_duration }));
         scheduleReminder(
           userId,
-          initialMessage, // Use the initial plan message
+          initialMessage, // Ensure a fallback message
           parseTimeToNextOccurrence(state.data.fitness_reminder_time),
           async () => {
             const newPlan = await analyzeHealthData({
@@ -814,9 +814,9 @@ client.on('message', async (message) => {
               'UPDATE fitness_plans SET plan = $1 WHERE user_id = $2 AND goal = $3 AND type = $4 AND duration_days = $5',
               [newPlan, userId, state.data.fitness_goal, state.data.fitness_type, state.data.fitness_duration]
             );
-            return getMessage('fitness_reminder', { plan: newPlan }); // Return new message for next reminder
+            return getMessage('fitness_reminder', { plan: newPlan }) || 'Time for your fitness plan update';
           },
-          1 // Daily reminder (1 day)
+          1
         );
         state = { step: 'main_menu', data: state.data };
         setState(userId, state);
