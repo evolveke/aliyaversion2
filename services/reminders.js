@@ -1,6 +1,6 @@
 const { Client } = require('whatsapp-web.js');
 const { logger } = require('../utils/logger');
-const { getMessage } = require('./messages');
+const moment = require('moment-timezone'); // Install with `npm install moment-timezone`
 
 // In-memory store for reminders
 const reminders = new Map();
@@ -13,76 +13,80 @@ function setClient(whatsappClient) {
 }
 
 // Schedule a reminder
-function scheduleReminder(userId, message, time, callback = null, durationDays = 1) {
+function scheduleReminder(userId, message, timeStr, callback = null, durationDays = 1) {
   try {
     if (!client) {
       throw new Error('WhatsApp client not initialized');
     }
 
-    const now = Date.now();
-    if (time <= now) {
-      logger.warn(`Reminder time ${time} is in the past for user ${userId}`);
+    // Validate message
+    if (!message || typeof message !== 'string' || message.trim() === '') {
+      logger.error(`Invalid message for user ${userId}: ${message}`);
+      return;
+    }
+
+    // Parse time string (e.g., "08:00 AM") to a timestamp
+    const now = moment().tz('Africa/Nairobi'); // Use user's timezone (adjust based on location)
+    const [time, period] = timeStr.match(/(\d{2}:\d{2}) (AM|PM)/i).slice(1);
+    const [hours, minutes] = time.split(':').map(Number);
+    let reminderTime = moment(now).set({ hour: hours % 12 + (period.toUpperCase() === 'PM' ? 12 : 0), minute: minutes, second: 0, millisecond: 0 });
+
+    // If the time is in the past today, schedule for tomorrow
+    if (reminderTime.isBefore(now)) {
+      reminderTime.add(1, 'day');
+    }
+
+    const timeMs = reminderTime.valueOf();
+    if (timeMs <= Date.now()) {
+      logger.warn(`Reminder time ${timeMs} is in the past or invalid for user ${userId}`);
       return;
     }
 
     // Calculate delay until the reminder time
-    const delay = time - now;
+    const delay = timeMs - Date.now();
 
     // Store reminder details
-    const reminderId = `${userId}_${time}`;
+    const reminderId = `${userId}_${timeMs}`;
     reminders.set(reminderId, {
       userId,
-      message,
-      time,
+      message: message.trim(),
+      time: timeMs,
       callback,
       durationDays: durationDays === Infinity ? Infinity : Math.max(1, durationDays),
       daysLeft: durationDays === Infinity ? Infinity : Math.max(1, durationDays),
     });
 
     // Schedule the reminder
-    setTimeout(async () => {
+    const job = setTimeout(async () => {
       try {
-        // Send the reminder message
-        await client.sendMessage(userId, message);
-        logger.info(`Reminder sent to ${userId}: ${message}`);
+        await client.sendMessage(userId, reminder.message);
+        logger.info(`Reminder sent to ${userId}: ${reminder.message}`);
 
-        // Execute callback if provided (e.g., for symptom follow-up)
         if (callback) {
           await callback();
         }
 
-        // Handle recurring reminders
         const reminder = reminders.get(reminderId);
         if (reminder && reminder.daysLeft > 1) {
-          // Decrease days left
           reminder.daysLeft = reminder.durationDays === Infinity ? Infinity : reminder.daysLeft - 1;
-
-          // Schedule next reminder (24 hours later)
-          const nextTime = reminder.time + 24 * 60 * 60 * 1000;
-          scheduleReminder(
-            userId,
-            message,
-            nextTime,
-            callback,
-            reminder.durationDays === Infinity ? Infinity : reminder.daysLeft
-          );
+          const nextTime = reminder.time + 24 * 60 * 60 * 1000; // Next day
+          scheduleReminder(userId, reminder.message, moment(nextTime).format('HH:mm A'), callback, reminder.daysLeft);
         } else {
-          // Remove reminder if duration is complete
           reminders.delete(reminderId);
           logger.info(`Reminder ${reminderId} completed or removed`);
         }
       } catch (error) {
-        logger.error(`Error sending reminder to ${userId}:`, error);
+        logger.error(`Error sending reminder to ${userId}: ${error.message}`);
       }
     }, delay);
 
-    logger.info(`Reminder scheduled for ${userId} at ${new Date(time).toISOString()} for ${durationDays} days`);
+    logger.info(`Reminder scheduled for ${userId} at ${reminderTime.format('YYYY-MM-DD HH:mm:ss')} for ${durationDays} days with message: ${message}`);
   } catch (error) {
-    logger.error(`Error scheduling reminder for ${userId}:`, error);
+    logger.error(`Error scheduling reminder for ${userId}: ${error.message}`);
   }
 }
 
-// Cancel all reminders for a user (e.g., on "cancel" command)
+// Cancel all reminders for a user
 function cancelReminders(userId) {
   for (const [reminderId] of reminders) {
     if (reminderId.startsWith(`${userId}_`)) {

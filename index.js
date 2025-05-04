@@ -794,10 +794,11 @@ client.on('message', async (message) => {
           'INSERT INTO fitness_plans (user_id, goal, type, duration_days, daily_time, reminder_time, plan) VALUES ($1, $2, $3, $4, $5, $6, $7)',
           [userId, state.data.fitness_goal, state.data.fitness_type, state.data.fitness_duration, state.data.fitness_daily_time, state.data.fitness_reminder_time, plan]
         );
+        const initialMessage = getMessage('fitness_reminder', { plan: plan });
         message.reply(getMessage('fitness_plan_result', { plan, duration: state.data.fitness_duration }));
         scheduleReminder(
           userId,
-          null, // Message will be generated dynamically
+          initialMessage, // Use the initial plan message
           parseTimeToNextOccurrence(state.data.fitness_reminder_time),
           async () => {
             const newPlan = await analyzeHealthData({
@@ -813,9 +814,9 @@ client.on('message', async (message) => {
               'UPDATE fitness_plans SET plan = $1 WHERE user_id = $2 AND goal = $3 AND type = $4 AND duration_days = $5',
               [newPlan, userId, state.data.fitness_goal, state.data.fitness_type, state.data.fitness_duration]
             );
-            return getMessage('fitness_reminder', { plan: newPlan });
+            return getMessage('fitness_reminder', { plan: newPlan }); // Return new message for next reminder
           },
-          state.data.fitness_duration
+          1 // Daily reminder (1 day)
         );
         state = { step: 'main_menu', data: state.data };
         setState(userId, state);
@@ -877,10 +878,11 @@ client.on('message', async (message) => {
           'INSERT INTO meal_plans (user_id, preference, goal, duration_days, reminder_time, plan) VALUES ($1, $2, $3, $4, $5, $6)',
           [userId, state.data.meal_preference, state.data.meal_goal, state.data.meal_duration, state.data.meal_reminder_time, plan]
         );
+        const initialMessage = getMessage('meal_reminder', { plan: plan });
         message.reply(getMessage('meal_plan_result', { plan, duration: state.data.meal_duration }));
         scheduleReminder(
           userId,
-          null, // Message will be generated dynamically
+          initialMessage, // Use initial plan message
           parseTimeToNextOccurrence(state.data.meal_reminder_time),
           async () => {
             const newPlan = await analyzeHealthData({
@@ -895,9 +897,9 @@ client.on('message', async (message) => {
               'UPDATE meal_plans SET plan = $1 WHERE user_id = $2 AND preference = $3 AND goal = $4 AND duration_days = $5',
               [newPlan, userId, state.data.meal_preference, state.data.meal_goal, state.data.meal_duration]
             );
-            return getMessage('meal_reminder', { plan: newPlan });
+            return getMessage('meal_reminder', { plan: newPlan }); // Return new message for next reminder
           },
-          state.data.meal_duration
+          1 // Daily reminder (1 day)
         );
         state = { step: 'main_menu', data: state.data };
         setState(userId, state);
@@ -982,7 +984,14 @@ client.on('message', async (message) => {
           userId,
           getMessage('medication_reminder', { name: state.data.medication_name }),
           parseTimeToNextOccurrence(state.data.medication_time),
-          null,
+          async () => {
+            const updatedReminder = await pool.query(
+              'SELECT medication_name FROM medication_reminders WHERE user_id = $1 AND reminder_time = $2',
+              [userId, state.data.medication_time]
+            );
+            const currentName = updatedReminder.rows[0]?.medication_name || state.data.medication_name;
+            return getMessage('medication_reminder', { name: currentName }); // Update if changed
+          },
           Infinity
         );
         state = { step: 'main_menu', data: state.data };
@@ -1003,13 +1012,15 @@ client.on('message', async (message) => {
             [userId, true]
           );
           message.reply(getMessage('daily_tips_subscribe'));
-          const tip = await analyzeHealthData({ type: 'health_tip' });
           scheduleReminder(
             userId,
-            getMessage('daily_tip', { tip }),
+            getMessage('daily_tip', { tip: await analyzeHealthData({ type: 'health_tip' }) }), // Initial tip
             parseTimeToNextOccurrence('08:00'),
-            null,
-            Infinity
+            async () => {
+              const newTip = await analyzeHealthData({ type: 'health_tip' });
+              return getMessage('daily_tip', { tip: newTip }); // Generate new tip daily
+            },
+            Infinity // Ongoing daily reminders
           );
         } else {
           await pool.query(
