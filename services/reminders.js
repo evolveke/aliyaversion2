@@ -63,21 +63,26 @@ function scheduleReminder(userId, message, timeStrOrTimestamp, callback = null, 
     // Schedule the reminder
     const job = setTimeout(async () => {
       try {
-        await client.sendMessage(userId, reminder.message);
-        logger.info(`Reminder sent to ${userId}: ${reminder.message}`);
+        const currentReminder = reminders.get(reminderId); // Fetch the reminder safely
+        if (!currentReminder) {
+          logger.warn(`Reminder ${reminderId} not found`);
+          return;
+        }
+
+        await client.sendMessage(userId, currentReminder.message);
+        logger.info(`Reminder sent to ${userId}: ${currentReminder.message}`);
 
         if (callback) {
           const newMessage = await callback();
           if (newMessage && typeof newMessage === 'string') {
-            reminder.message = newMessage.trim();
+            currentReminder.message = newMessage.trim();
           }
         }
 
-        const reminder = reminders.get(reminderId);
-        if (reminder && reminder.daysLeft > 1) {
-          reminder.daysLeft = reminder.durationDays === Infinity ? Infinity : reminder.daysLeft - 1;
-          const nextTime = reminder.time + 24 * 60 * 60 * 1000;
-          scheduleReminder(userId, reminder.message, nextTime, callback, reminder.daysLeft);
+        if (currentReminder.daysLeft > 1) {
+          currentReminder.daysLeft = currentReminder.durationDays === Infinity ? Infinity : currentReminder.daysLeft - 1;
+          const nextTime = currentReminder.time + 24 * 60 * 60 * 1000;
+          scheduleReminder(userId, currentReminder.message, nextTime, callback, currentReminder.daysLeft);
         } else {
           reminders.delete(reminderId);
           logger.info(`Reminder ${reminderId} completed or removed`);
